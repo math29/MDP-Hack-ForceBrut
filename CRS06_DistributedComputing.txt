@@ -1,0 +1,332 @@
+==============================================================================
+Application : calcul distribué             (Fabrice Harrouet, module CRS, 2UC)
+==============================================================================
+
+Nous réutilisons ici nos connaissances en matière de client/serveur TCP afin
+d'accélérer des calculs en les distribuant sur de multiples machines à travers
+un réseau.
+Ceci semble s'apparenter au calcul parallèle déjà abordé dans une précédente
+application mais il y a une différence fondamentale dans la nature des
+problèmes qui peuvent être soumis à telle ou telle démarche d'optimisation.
+Dans le cas de la démarche que nous abordons ici, il est rédhibitoire de
+traiter un problème dont chacun des sous-problèmes doit échanger de
+l'information avec les autres (c'était le cas lorsque nous parallélisions le
+calcul de la déformation mécanique d'un maillage).
+En effet, si nous distribuions un tel calcul nous constaterions que
+l'essentiel du temps serait consacré à l'échange des données entre machines et
+non au calcul ; le temps total de réalisation du traitement serait alors
+beaucoup plus long que la version purement séquentielle !
+Pour que la démarche de distribution aie un intérêt, il faut que le problème
+puisse se découper en de nombreux sous-problèmes _INDÉPENDANTS_ ; chacun
+d'eux doit pouvoir être réalisé sans se soucier des autres.
+Dans ce cas, il y a très peu de communication, et le temps est effectivement
+passé à calculer, ce qui promet un bon passage à l'échelle (toujours plus
+de noeuds de calculs améliorent toujours les performances).
+
+Le problème qui nous servira de prétexte ici consiste à ``casser'' des mots de
+passe par ``force brute''.
+Les bonnes pratiques de sécurité (pas toujours suivies malheureusement) font
+qu'un mot de passe n'est généralement pas mémorisé en clair dans un système.
+Au contraire, dès sa saisie initiale il est soumis à un algorithme (il en
+existe toute une variété) qui produit un mot de passe chiffré ; c'est ce
+dernier qui est mémorisé.
+Le procédé n'est pas bijectif, c'est à dire qu'il est impossible à partir d'un
+mot de passe chiffré de retrouver le mot de passe en clair qui est à son
+origine (c'est bien là tout l'intérêt du procédé), mais il est déterministe,
+c'est à dire que le même mot de passe en clair soumis au même algorithme
+produit toujours le même mot de passe chiffré.
+Une procédure d'authentification (login, site web ...) consiste alors à
+demander à l'utilisateur un mot de passe en clair, à le chiffrer avec
+l'algorithme choisi et à comparer le mot de passe chiffré obtenu avec celui
+qui avait été préalablement mémorisé ; s'ils sont identiques ceci signifie
+que le mot de passe en clair saisi est identique à celui de la saisie
+initiale (le risque de collision est infime).
+
+Nous nous proposons ici de retrouver le mot de passe en clair qui correspond
+à un mot de passe chiffré donné.
+Puisque le procédé n'est pas bijectif, nous ne pouvons que fournir à
+l'algorithme de chiffrement des mots de passe en clair jusqu'à tomber par
+chance sur celui qui produira le même mot de passe chiffré que celui que nous
+souhaitons casser.
+Il y a des variantes dans cette démarche, notamment en produisant des
+variations autour de dictionnaires de mots de passe usuels ; ceci offre
+l'avantage d'être rapide dans le cas de mots de passe faciles (le nom de
+mon chien, ma ville de naissance ...) mais n'aboutit généralement pas pour
+les bons mots de passe (qui ne signifient rien).
+La solution ultime, dénommée ``force brute'', consiste à faire une exploration
+exhaustive de tout l'espace combinatoire comme on peut le faire avec un
+cadenas à chiffre sur un vélo ou une valise.
+Vous le devinez aisément, s'il s'agit de trouver une séquence de caractères
+quelconques, ça peut durer un certain temps ...
+C'est ici qu'apparaît l'intérêt de distribuer ces calculs sur de nombreuses
+machines car pendant que l'une d'elles explore une partie de l'espace
+combinatoire, une autre peut en explorer une autre partie de manière
+totalement indépendante.
+Il suffit simplement de découper cet espace en de nombreuses tranches et
+de confier l'exploration d'une tranche non encore essayée à toute machine
+qui en fait la demande.
+Plus il y aura de machines réalisant cette exploration et plus tôt
+l'une d'elles tombera sur la bonne combinaison de caractères.
+
+Nous entrevoyons déjà l'architecture de notre application : un serveur se
+chargera de découper l'espace combinatoire en tranches et de multiples clients
+s'y connecteront afin d'obtenir le mot de passe chiffré à casser et des
+tranches à explorer.
+Afin de faciliter la réalisation, nous simplifierons extrêmement le problème ;
+il s'agit surtout de faire du client/serveur TCP, les mots de passe ne sont
+ici qu'un prétexte (ceux qui seront les plus intéressés auront tout le loisir
+de développer le sujet à leur guise).
+Ainsi, nous supposons savoir que le mot de passe en clair est constitué
+exactement de 5 caractères allant du code ASCII 33 (!) au code ASCII 126 (~).
+L'espace combinatoire est donc constitué de 7339040224 possibilités, chacune
+d'elles pouvant être considérée comme un nombre à 5 chiffres exprimé en base
+94 (1+126-33).
+Nous choisissons alors de considérer cet espace combinatoire comme un très
+long entier de 64 bits (``long long'') comptant de 0 à 7339040223 ; dans ces
+conditions, la division de l'espace en tranche est triviale.
+La taille des tranches a été fixée plus ou moins arbitrairement ici à un
+million : suffisamment grande pour que chacune d'elles nécessite un temps de
+calcul assez long devant le temps de communication et suffisamment petite afin
+que leur nombre soit suffisamment élevé pour occuper de nombreuses machines
+simultanément.
+Le passage d'un tel entier à la combinaison de 5 caractères est également
+très simple (voir le code fourni).
+
+==============================================================================
+A) Prise en main du problème
+
+Le programme ``decryptServer.c'' est déjà partiellement complété et
+utilisable lorsqu'il est invoqué sans argument.
+Il commence par fabriquer aléatoirement, dans la variable ``secret'', un mot
+de passe de 5 caractères tel que décrit plus haut ; c'est ce mot de passe
+qu'il s'agira de retrouver.
+Ce dernier est ensuite utilisé pour générer le mot de passe chiffré grâce à la
+fonction standard ``crypt()'' qui applique l'algorithme DES avec la graine
+"S7" (peu importent l'algorithme et la graine ici).
+Nous obtenons alors dans la variable ``encrypted'' la graine "S7" suivie
+du mot de passe chiffré ; c'est ceci qui sera transmis aux programmes qui
+tenteront de retrouver le mot de passe en clair.
+Après avoir évalué la taille de l'espace combinatoire (``combinations'') et
+l'avoir découpé en ``sliceCount'' tranches (``slices'') de taille
+``sliceSize'', le programme se termine par l'invocation de la fonction
+``estimateExhaustiveSearchDuration()'' (lorsqu'aucun argument n'est transmis
+en ligne de commande).
+
+Cette fonction sert juste d'illustration du procédé et permet notamment
+d'estimer la durée de la recherche exhaustive si elle était effectuée sur un
+unique CPU de votre machine.
+Vous y trouverez en particulier :
+ - la détermination des bornes inférieure et supérieure d'une tranche (choisie
+   aléatoirement ici),
+ - la fabrication d'un mot de passe de 5 caractères (``password'') à partir
+   d'un entier très long (``attempt'').
+ - la confrontation de ce mot de passe (``password'') avec celui à découvrir
+   (``encrypted'') moyennant l'utilisation de ``crypt()''.
+   nb: ``encrypted'' sert lui-même de graine ici puisqu'il commence par la
+       graine choisie initialement ("S7"), c'est justement fait exprès.
+
+Essayez donc ce programme :
+  $ ./decryptServer
+et observez son fonctionnement en vous assurant que vous comprenez bien toutes
+les étapes du code qu'il exécute.
+La durée estimée est plutôt décourageante, n'est-ce pas ?
+
+Documentation à consulter :
+  man 3 rand
+  man 3 crypt
+  man 3 strcpy
+  man 3 strcmp
+
+==============================================================================
+B) Réalisation du serveur
+
+Il s'agit maintenant de compléter ``decryptServer.c'', en vous fiant aux
+commentaires, afin qu'il se comporte comme un serveur TCP multi-threads
+lorsqu'un numéro de port lui est transmis sur la ligne de commande.
+
+Puisque les différents threads qui dialoguent avec les clients sont chargés du
+partage des tranches à attribuer aux clients ils sont susceptibles de
+manipuler simultanément les variables ``testedCount'' et ``slices''.
+C'est pour ceci qu'elles sont qualifiées de ``volatile'' et qu'elles doivent
+être protégées par le mutex ``mtx'' lorsqu'elles sont utilisées par les
+threads.
+La seule information qu'il est nécessaire de transmettre à chaque thread
+créé est un entier alloué dynamiquement qui désigne la socket de dialogue qui
+le relie au client nouvellement connecté.
+
+La fonction ``dialogThread()'' est prévue pour fournir des tranches
+successives à un même client ; c'est à dire que quand un client a traité une
+tranche, le même thread lui en propose une autre (jusqu'à trouver le mot de
+passe ou tomber sur un problème de communication).
+Le choix d'une tranche consiste à parcourir séquentiellement, depuis son
+début, le tableau ``slices'' et s'arrêter dès qu'une case est à 0 (elles
+le sont toutes au début).
+Il s'agit alors de remplacer ce 0 par un 1 pour signifier que cette tranche
+n'est plus à traiter (elle va l'être tout de suite).
+Bien entendu il faut prévoir le cas où toutes les cases on été parcourues
+sans trouver de 0 (tout a été exploré).
+Une fois une tranche libre choisie, on en détermine les bornes ``start'' et
+``end'' pour les transmettre, en plus de ``encrypted'', au client dans une
+ligne de texte.
+Le client doit alors produire une ligne de texte de réponse.
+Si cette réponse est négative ("FAILURE\n"), il suffit de réaliser quelques
+statistiques avant de reboucler pour choisir une nouvelle tranche à confier
+au client.
+En revanche, si la réponse est un succès ("SUCCESS mot_de_passe_en_clair\n"),
+il n'y a qu'à afficher ce mot de passe et mettre fin brutalement au programme
+(pas la peine de chercher plus loin, y compris pour les autres clients).
+
+Vous ne pourrez pas immédiatement tester ce programme (il vous faudra écrire
+le client approprié).
+Toutefois, l'utilitaire ``nc'' pourra vous aider à la mise au point.
+Il s'agit d'un client TCP générique qui s'utilise comme ceci :
+  $ nc nom_du_serveur numéro_de_port
+Une fois la connexion établie, ce qui est saisi dans la console est envoyé par
+la connexion et ce qui est reçu par la connexion est affiché dans la console.
+Vous devriez donc constater que dès que vous vous connectez à votre serveur,
+celui-ci vous envoie une ligne de texte comme ceci :
+  mot_de_passe_chiffré indice_de_début indice_de_fin
+à laquelle vous vous contenterez de répondre (en saisissant avec vos doigts)
+la ligne de texte suivante :
+  FAILURE
+Le serveur doit alors vous proposer une autre tranche à explorer, et ainsi de
+suite, jusqu'à ce que vous répondiez par la ligne de texte :
+  SUCCESS mot_de_passe_en_clair_de_5_caractères
+ce qui doit provoquer l'arrêt du serveur.
+Pendant cette phase de test vous devriez constater que le serveur affiche des
+statistiques après chaque échange.
+Vous devez également tester avec plusieurs clients ``nc'' qui s'adressent
+simultanément à votre serveur afin d'observer la distribution des tranches.
+
+Documentation à consulter :
+  Memo_Sockets.pdf
+  man 2 socket
+  man 2 setsockopt
+  man 2 bind
+  man 2 listen
+  man 2 accept
+  man 2 send
+  man 2 recv
+  man 2 close
+  man 3 malloc
+  man 3 free
+  man 3 sprintf
+  man 3 sscanf
+  man 3 pthread_create
+  man 3 pthread_mutex_init
+  man 3 pthread_mutex_destroy
+  man 3 pthread_mutex_lock
+  man 3 pthread_mutex_unlock
+
+==============================================================================
+C) Réalisation du client
+
+Une fois que le serveur vous semble au point, il ne reste plus qu'à compléter
+le programme ``decryptClient.c'' pour qu'il réalise les calculs attendus.
+Il s'agit en premier lieu d'un client TCP qui se connectera à votre serveur
+dont les coordonnées seront passées sur la ligne de commande.
+
+La boucle de dialogue avec le serveur commence par recevoir une ligne de texte
+  "mot_de_passe_chiffré indice_de_début indice_de_fin\n"
+Si cette réception se passe mal (le serveur vient d'être arrêté par exemple)
+il suffit de terminer le client.
+Désormais le client a tout ce qu'il lui faut pour explorer la tranche
+indiquée.
+Si cette tranche contient le mot de passe recherché, il faudra répondre au
+serveur la ligne de texte
+  "SUCCESS mot_de_passe_en_clair\n"
+sinon la ligne de texte
+  "FAILURE\n"
+Dans ce cas, une nouvelle tranche à explorer sera probablement fournie par le
+serveur.
+
+Testez cette fois votre serveur lorsqu'il est sollicité par votre client.
+Assurez vous du bon enchaînement des opérations.
+Vérifiez que votre client s'arrête bien lorsque vous arrêtez votre serveur
+(avec la combinaison de touches [Control][c] dans son terminal).
+Testez ensuite avec plusieurs clients qui sollicitent le même serveur et
+observez la répartition des tranches sur les différents clients.
+En particulier, le script ``multiClient.sh'' qui vous est fourni permet de
+lancer autant de clients qu'il y a de CPUs sur la machine afin d'en exploiter
+toutes les ressources de calcul.
+  $ ./multiClient.sh ./decryptClient machine_serveur port_serveur
+
+Documentation à consulter :
+  Memo_Sockets.pdf
+  man 3 gethostbyname
+  man 2 socket
+  man 2 connect
+  man 2 recv
+  man 2 send
+  man 2 close
+  man 3 sscanf
+  man 3 sprintf
+  man 3 strcmp
+  man 3 crypt
+
+==============================================================================
+D) Déploiement du calcul distribué
+
+Il ne reste plus qu'à distribuer les calculs des clients sur un grand nombre
+de machines afin d'accélérer considérablement le traitement du problème.
+Pour ceci nous utiliserons toutes les machines des salles de Labo
+d'informatique de l'ENIB.
+Il y en a normalement 53 dotées de 2 CPUs, 58 dotées de 4 CPUs, et 25 dotées
+de 8 CPUs ce qui fait un ensemble de 538 CPUs à disposition ; bien entendu
+elles n'ont pas toutes la même puissance et certaines peuvent être utilisées
+par d'autres traitements ou tout simplement éteintes.
+
+Le script ``massiveLaunch.sh'' qui vous est fourni permet de se connecter en
+SSH sur toutes les machines listées dans ``enib_hosts.txt'' afin de leur faire
+exécuter vos clients via le script ``multiClient.sh''.
+Tout ceci sera facilité par le fait que votre compte est partagé sur toutes
+les machines ; vos mêmes fichiers sont donc directement accessibles depuis
+chacune d'entre elles.
+L'outil SSH permet en effet (entre autres) d'obtenir un shell sur une machine
+distante afin de lui faire exécuter des commandes.
+Ceci est généralement soumis à une authentification de l'utilisateur par un
+mot de passe.
+Il n'est pas question ici d'avoir à saisir un tel mot de passe à chaque
+connexion SSH (il y en aura beaucoup !), c'est pourquoi il faudra procéder au
+préalable à un échange de clefs.
+Ceci consiste à authentifier l'utilisateur à l'aide d'une paire de clefs de
+chiffrement asymétriques (voir le cours ``Chiffrement_Authentification.pdf''
+pour plus de détails).
+  $ ssh-keygen -t rsa -N ""
+                 <-- juste valider les emplacements proposés pour les fichiers
+  $ cat ~/.ssh/id_rsa.pub >>~/.ssh/authorized_keys
+Désormais, SSH ne vous demande plus de mot de passe pour changer de machine
+de Labo :
+  $ hostname
+  safran8         <-- je suis sur safran8 (c'est un exemple)
+  $ ssh piment12  <-- je veux obtenir un shell sur piment12 (c'est un exemple)
+  $ hostname      <-- aucun mot de passe ne m'est demandé, je vérifie
+  piment12        <-- c'est le cas, ce shell est bien exécuté par piment12
+  $ exit          <-- je termine le shell distant
+  $ hostname      <-- je vérifie que je suis bien de retour sur safran8
+  safran8         <-- c'est le cas
+
+Maintenant, il ne reste plus qu'à tester le déploiement en fournissant le port
+de votre serveur au script ``massiveLaunch.sh'' :
+  $ ./massiveLaunch.sh port_serveur
+Vous devriez constater que votre serveur reçoit de nombreuses connexions puis
+distribue les tranches à explorer à un rythme soutenu.
+La progression doit être beaucoup plus rapide que lorsque vous utilisiez un
+seul client.
+Vous pouvez même comparer ce temps de traitement avec ce qui était
+initialement estimé par la fonction ``estimateExhaustiveSearchDuration()''.
+Si vous voulez faire varier le nombre de machines à utiliser, afin d'observer
+la manière dont le procédé passe à l'échelle, vous pouvez simplement commenter
+certaines machines dans le fichier ``enib_hosts.txt'' en ajoutant un dièse (#)
+au début de leur ligne.
+Attention toutefois lorsque vous mesurez les performances ; les machines
+peuvent être utilisées par d'autres personnes (notamment toutes celles qui
+font cet exercice) ce qui implique de grandes fluctuations dans les
+performances constatées.
+
+Documentation à consulter :
+  Chiffrement_Authentification.pdf
+  man 1 ssh
+  man 1 ssh-keygen
+
+==============================================================================
