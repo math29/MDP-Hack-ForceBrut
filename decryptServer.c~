@@ -164,7 +164,7 @@ for(;;)
       char *chaine = strstr(buffer, "SUCCESS");
       if(chaine != NULL){
 	double duration=getTime()-startTime;
-	memmove(&buffer[0], &buffer[6], strlen(buffer)-7);
+	memmove(&buffer[0], &buffer[7], strlen(buffer)-7);
 	printf("%g s est le temps qui a été mis pour craquer le mdp : %s !\n",duration, buffer);
 	exit(1);
       }

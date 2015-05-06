@@ -17,7 +17,8 @@ if(argc!=3)
 
 //---- extract destination IP address ----
 //
-// ... À COMPLÉTER ...
+struct hostent *host=gethostbyname(argv[1]);
+in_addr_t ipAddress=*((in_addr_t *)(host->h_addr));
 //
 // Obtenir l'adresse IP de ``argv[1]''
 //
@@ -29,7 +30,16 @@ if(sscanf(argv[2],"%d",&portNumber)!=1)
 
 //---- create client socket ----
 //
-// ... À COMPLÉTER ...
+int clientSocket=socket(AF_INET,SOCK_STREAM,0);
+
+struct sockaddr_in toAddr;
+toAddr.sin_family=AF_INET;
+toAddr.sin_port=htons(portNumber);
+toAddr.sin_addr.s_addr=ipAddress;
+int etat = connect(clientSocket,(struct sockaddr *)&toAddr,sizeof(toAddr));
+if (etat == -1){
+printf("ERROR : connection impossible");
+}
 //
 // Créer une connexion TCP vers la destination et le port indiqués sur la
 // ligne de commande.
@@ -42,8 +52,21 @@ for(;;)
   //---- receive a slice to be tested ----
   char encrypted[14]="";
   long long start=0,end=0;
+  int r;
   //
-  // ... À COMPLÉTER ...
+  
+  r = recv(clientSocket,buffer,sizeof(buffer),0);
+  
+  if(r<=0) {
+    perror("recv");
+    exit(1);
+   }
+  buffer[r] = '\0' ;
+  printf("%s\n", buffer);
+  memcpy(encrypted, &buffer[0], 14);
+  printf("Encrypte : %s\n", encrypted);
+  memcpy(start, &buffer[0], 14);
+  printf("Encrypte : %s\n", encrypted);
   //
   // Obtenir une ligne de texte
   //   "mot_de_passe_chiffré indice_de_début indice_de_fin\n"
