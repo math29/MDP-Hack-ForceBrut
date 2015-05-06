@@ -254,7 +254,8 @@ memset(&addr,0,sizeof(struct sockaddr_in));
 addr.sin_family=AF_INET;
 addr.sin_port=htons(portNumber);
 addr.sin_addr.s_addr=htonl(INADDR_ANY);
-RESTART_SYSCALL(r,bind(listenFd,(const struct sockaddr *)&addr, sizeof(struct sockaddr_in)));
+RESTART_SYSCALL(r,bind(listenFd,(const struct sockaddr *)&addr,
+sizeof(struct sockaddr_in)));
 
 if(r==-1) { perror("bind"); return EXIT_FAILURE; }
 if(listen(listenFd,5)==-1) { perror("listen"); return EXIT_FAILURE; }
