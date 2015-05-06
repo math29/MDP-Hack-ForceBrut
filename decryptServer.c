@@ -161,19 +161,13 @@ for(;;)
 
       //---- analyse reply for this slice ----
       //
-      if(strstr(buffer, "SUCCESS");){
-	double seconds=getTime()-startTime;
-	printf(" in %g seconds\n",seconds);
-	//---- extrapolate the duration for an exhaustive search ----
-	seconds*=combinations/(double)(end-start);
-	int hours=(int)(seconds/3600.0);
-	seconds-=3600.0*hours;
-	int minutes=(int)(seconds/60.0);
-	seconds-=60.0*minutes;
-	printf("%d h, %d m and %d s would have been necessary "
-	      "for an exhaustive search!\n",
-	      hours,minutes,(int)seconds);
-    }
+      char *chaine = strstr(buffer, "SUCCESS");
+      if(chaine != NULL){
+	double duration=getTime()-startTime;
+	memmove(&buffer[0], &buffer[7], strlen(buffer)-7);
+	printf("%g s est le temps qui a été mis pour craquer le mdp : %s !\n",duration, buffer);
+	exit(1);
+      }
   //
   // Si la réponse commence par "SUCCESS" alors le mot suivant correspond
   // au mot de passe découvert ; il suffit alors de l'afficher ainsi que la
@@ -185,15 +179,14 @@ for(;;)
   ++testedCount;
   double done=testedCount/(double)sliceCount;
   double duration=getTime()-startTime;
-  printf("%g%% done in %g s (%g s estimated)\n",
-         100.0*done,duration,duration/done);
+  printf("%g%% done in %g s (%g s estimated)\n", 100.0*done,duration,duration/done);
   pthread_mutex_unlock(&mtx);
   }
 
 //---- close dialog socket ----
 printf("client disconnected\n");
 //
-// ... À COMPLÉTER ...
+close(dialogSocket);
 //
 // fermer la socket de dialogue
 //
@@ -254,7 +247,7 @@ if(sscanf(argv[1],"%d",&portNumber)!=1)
 //
 
 
-int listenFd,fd,r,on;
+int listenFd, r, on;
 struct sockaddr_in addr;
 
 RESTART_SYSCALL(listenFd,socket(PF_INET,SOCK_STREAM,0));
