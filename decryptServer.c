@@ -122,7 +122,9 @@ for(;;)
   (void)end; // avoid ``unused variable'' warning
   (void)buffer; // avoid ``unused variable'' warning
   //
-  // ... À COMPLÉTER ...
+
+  sprintf(buffer,"%s %lld %lld\n", encrypted, start, end);
+  sendResult = send(dialogSocket,buffer,strlen(buffer),0);
   //
   // Rédiger une ligne de texte
   //   "mot_de_passe_chiffré indice_de_début indice_de_fin\n"
@@ -133,7 +135,7 @@ for(;;)
   //---- mark this slice as untested in case of send failure ----
   if(sendResult==-1)
     {
-    perror("send");
+    perror("send error");
     pthread_mutex_lock(&mtx);
     slices[slice]=0; // this slice will be retried later by another client
     pthread_mutex_unlock(&mtx);
@@ -141,27 +143,37 @@ for(;;)
     }
 
   //---- receive a reply ----
-  int recvResult=-1;
-  //
-  // ... À COMPLÉTER ...
+  int recvResult=recv(dialogSocket,buffer,sizeof(buffer),0);
+  printf("Message recu : %s\n",buffer);
   //
   // Obtenir dans ``buffer'' une ligne de texte depuis le client.
   //
 
   //---- mark this slice as untested in case of receive failure ----
-  if(recvResult<=0)
-    {
+  if(recvResult<=0) {
     perror("recv");
     pthread_mutex_lock(&mtx);
     slices[slice]=0; // this slice will be retried later by another client
     pthread_mutex_unlock(&mtx);
     break;
     }
-  buffer[recvResult]='\0';
+      buffer[recvResult]='\0';
 
-  //---- analyse reply for this slice ----
-  //
-  // ... À COMPLÉTER ...
+      //---- analyse reply for this slice ----
+      //
+      if(strstr(buffer, "SUCCESS");){
+	double seconds=getTime()-startTime;
+	printf(" in %g seconds\n",seconds);
+	//---- extrapolate the duration for an exhaustive search ----
+	seconds*=combinations/(double)(end-start);
+	int hours=(int)(seconds/3600.0);
+	seconds-=3600.0*hours;
+	int minutes=(int)(seconds/60.0);
+	seconds-=60.0*minutes;
+	printf("%d h, %d m and %d s would have been necessary "
+	      "for an exhaustive search!\n",
+	      hours,minutes,(int)seconds);
+    }
   //
   // Si la réponse commence par "SUCCESS" alors le mot suivant correspond
   // au mot de passe découvert ; il suffit alors de l'afficher ainsi que la
@@ -269,14 +281,18 @@ for(;;)
   {
   //---- accept new connection ----
   //
-  // ... À COMPLÉTER ...
+  struct sockaddr_in fromAddr;
+  socklen_t len=sizeof(fromAddr);
+  int * dialogSocket=(int *) malloc(sizeof(int));
+  * dialogSocket=accept(listenFd,(struct sockaddr *)&fromAddr,&len);
   //
   // Attendre la connexion d'un nouveau client TCP.
   //
 
   //---- start a new dialog thread ----
   //
-  // ... À COMPLÉTER ...
+  pthread_t th;
+  pthread_create(&th,NULL,dialogThread,(void*)dialogSocket);
   //
   // Démarrer un thread qui assurera le dialogue avec ce nouveau client dans
   // la fonction ``dialogThread()''.
@@ -290,7 +306,7 @@ for(;;)
 pthread_mutex_destroy(&mtx);
 free((void *)slices);
 //
-// ... À COMPLÉTER ...
+close(listenFd);
 //
 // fermer la socket d'écoute (jamais atteint ici, pas grave).
 //
