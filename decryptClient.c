@@ -63,10 +63,7 @@ for(;;)
    }
   buffer[r] = '\0' ;
   printf("%s\n", buffer);
-  memcpy(encrypted, &buffer[0], 14);
-  printf("Encrypte : %s\n", encrypted);
-  memcpy(start, &buffer[0], 14);
-  printf("Encrypte : %s\n", encrypted);
+  sscanf("%s %lld %lld", encrypted, start, end);
   //
   // Obtenir une ligne de texte
   //   "mot_de_passe_chiffré indice_de_début indice_de_fin\n"
