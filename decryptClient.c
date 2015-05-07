@@ -38,32 +38,34 @@ toAddr.sin_port=htons(portNumber);
 toAddr.sin_addr.s_addr=ipAddress;
 int etat = connect(clientSocket,(struct sockaddr *)&toAddr,sizeof(toAddr));
 if (etat == -1){
-printf("ERROR : connection impossible");
+  printf("ERROR : connection impossible");
 }
 //
 // Créer une connexion TCP vers la destination et le port indiqués sur la
 // ligne de commande.
 //
 
-for(;;)
-  {
+for(;;) {
   char buffer[0x100];
 
   //---- receive a slice to be tested ----
   char encrypted[14]="";
   long long start=0,end=0;
-  int r;
+  int r=-1;
   //
   
   r = recv(clientSocket,buffer,sizeof(buffer),0);
   
   if(r<=0) {
-    perror("recv");
+    perror("Probleme lors de la reception");
+    printf("buffer : %s", buffer);
     exit(1);
+    break;
    }
   buffer[r] = '\0' ;
   printf("%s\n", buffer);
-  sscanf("%s %lld %lld", encrypted, start, end);
+  sscanf(buffer, "%s %lld %lld", encrypted, &start, &end);
+  printf("encrypted : %s \n", encrypted);
   //
   // Obtenir une ligne de texte
   //   "mot_de_passe_chiffré indice_de_début indice_de_fin\n"
@@ -87,14 +89,22 @@ for(;;)
     //---- test it against the encrypted version ----
     if(!strcmp(encrypted,crypt(password,encrypted)))
       {
-      sprintf(buffer,"SUCCESS %s\n",password);
+      sprintf(buffer,"SUCCESS%s\n",password);
       break;
       }
     }
 
   //---- send reply to server ----
   //
-  // ... À COMPLÉTER ...
+  int sendResult=-1;
+  
+  sendResult = send(clientSocket,buffer,strlen(buffer),0);
+
+  if(sendResult == -1){
+    perror("send error");
+    exit(1);
+    break;
+  }
   //
   // Envoyer le message ``buffer'' au serveur.
   // En cas d'erreur d'envoi, on met fin au programme.
@@ -104,7 +114,7 @@ for(;;)
 
 //---- close client socket ----
 //
-// ... À COMPLÉTER ...
+close(clientSocket);
 //
 // Fermer la connexion.
 //

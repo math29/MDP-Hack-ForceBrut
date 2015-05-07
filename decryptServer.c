@@ -2,6 +2,10 @@
 
 #include "crsUtils.h"
 
+#define KRED  "\x1B[31m"
+#define KGRN  "\x1B[32m"
+#define KWHT  "\x1B[37m"
+
 #define PASSWORD_LENGTH 5
 #define FIRST_CHAR 33
 #define LAST_CHAR 126
@@ -122,8 +126,9 @@ for(;;)
   (void)end; // avoid ``unused variable'' warning
   (void)buffer; // avoid ``unused variable'' warning
   //
-
+  //printf("Le mot de passe crypté est : %s \n", encrypted);
   sprintf(buffer,"%s %lld %lld\n", encrypted, start, end);
+  //printf("On envoie le message suivant au client : %s \n", buffer);
   sendResult = send(dialogSocket,buffer,strlen(buffer),0);
   //
   // Rédiger une ligne de texte
@@ -133,18 +138,16 @@ for(;;)
   //
 
   //---- mark this slice as untested in case of send failure ----
-  if(sendResult==-1)
-    {
+  if(sendResult==-1){
     perror("send error");
     pthread_mutex_lock(&mtx);
     slices[slice]=0; // this slice will be retried later by another client
     pthread_mutex_unlock(&mtx);
     break;
-    }
+  }
 
   //---- receive a reply ----
   int recvResult=recv(dialogSocket,buffer,sizeof(buffer),0);
-  printf("Message recu : %s\n",buffer);
   //
   // Obtenir dans ``buffer'' une ligne de texte depuis le client.
   //
@@ -163,10 +166,13 @@ for(;;)
       //
       char *chaine = strstr(buffer, "SUCCESS");
       if(chaine != NULL){
-	double duration=getTime()-startTime;
-	memmove(&buffer[0], &buffer[7], strlen(buffer)-7);
-	printf("%g s est le temps qui a été mis pour craquer le mdp : %s !\n",duration, buffer);
-	exit(1);
+        printf(KGRN "Message recu : %s\n",buffer);
+      	double duration=getTime()-startTime;
+      	memmove(&buffer[0], &buffer[7], strlen(buffer)-7);
+      	printf("Le mot de passe a été craqué avec succes en %g !! \nLe voici : %s\n%s", duration, buffer, KWHT);
+      	exit(1);
+      }else{
+        printf(KRED "Message recu : %s",buffer);
       }
   //
   // Si la réponse commence par "SUCCESS" alors le mot suivant correspond
@@ -179,7 +185,7 @@ for(;;)
   ++testedCount;
   double done=testedCount/(double)sliceCount;
   double duration=getTime()-startTime;
-  printf("%g%% done in %g s (%g s estimated)\n", 100.0*done,duration,duration/done);
+  printf("%g%% done in %g s (%g s estimated)\n %s \n", 100.0*done,duration,duration/done, KWHT);
   pthread_mutex_unlock(&mtx);
   }
 
