@@ -24,4 +24,3 @@ cat enib_hosts.txt | while read HOST comment ; do
   ssh ${SSH_OPTS} ${HOST} \
       "cd ${HERE} ; ${COMMAND} >/dev/null 2>&1" </dev/null &
 done
-
